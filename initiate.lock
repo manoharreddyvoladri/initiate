@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "python_version": "3.11.7",
+  "generated_at": "2026-03-12T20:20:22.592598+00:00",
+  "dependencies": [
+    "pytest>=8.0.0"
+  ],
+  "resolved": [
+    "Pygments==2.19.2",
+    "colorama==0.4.6",
+    "iniconfig==2.3.0",
+    "packaging==26.0",
+    "pluggy==1.6.0",
+    "pytest==9.0.2"
+  ]
+}
