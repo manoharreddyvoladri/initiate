@@ -38,3 +38,12 @@ def test_doctor_returns_expected_keys(tmp_path: Path) -> None:
     assert "pip_ok" in data
     assert "runtime_config" in data
     assert data["script"] == str(script.resolve())
+
+
+def test_doctor_fix_reports_actions(tmp_path: Path) -> None:
+    script = tmp_path / "app.py"
+    script.write_text("print('ok')\n", encoding="utf-8")
+    data = doctor(script, fix=True)
+    assert data["fix_applied"] is True
+    assert isinstance(data["fix_actions"], list)
+    assert len(data["fix_actions"]) >= 1

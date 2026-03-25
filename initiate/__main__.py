@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .runtime import clean, create_lock, doctor, run
+from .scaffold import init_project
 
 
 def main() -> None:
@@ -23,13 +24,26 @@ def main() -> None:
     doctor_parser = subparsers.add_parser("doctor", help="Print environment diagnostics")
     doctor_parser.add_argument("script", nargs="?", type=Path, help="Optional entry script for dependency scan")
     doctor_parser.add_argument("--json", action="store_true", help="Print diagnostics as JSON")
+    doctor_parser.add_argument("--fix", action="store_true", help="Try automatic repair for common environment issues")
 
     clean_parser = subparsers.add_parser("clean", help="Remove cached runtime artifacts")
     clean_parser.add_argument("--all", action="store_true", help="Also remove initiate.lock")
 
+    init_parser = subparsers.add_parser("init", help="Create a starter project")
+    init_parser.add_argument("path", nargs="?", default=Path("."), type=Path, help="Target project directory")
+    init_parser.add_argument(
+        "--type",
+        dest="project_type",
+        default="script",
+        choices=["script", "fastapi", "flask", "streamlit"],
+        help="Starter template type",
+    )
+    init_parser.add_argument("--entry", default="app.py", help="Entry file name")
+    init_parser.add_argument("--force", action="store_true", help="Overwrite existing starter files")
+
     # Backward-compatible mode: python -m initiate app.py ...
     argv = sys.argv[1:]
-    known_commands = {"run", "lock", "doctor", "clean", "-h", "--help"}
+    known_commands = {"run", "lock", "doctor", "clean", "init", "-h", "--help"}
     if argv and argv[0] not in known_commands:
         argv = ["run", *argv]
     elif not argv:
@@ -70,7 +84,7 @@ def main() -> None:
         return
 
     if args.command == "doctor":
-        data = doctor(script=args.script)
+        data = doctor(script=args.script, fix=args.fix)
         if args.json:
             print(json.dumps(data, indent=2))
         else:
@@ -79,6 +93,17 @@ def main() -> None:
 
     if args.command == "clean":
         clean(remove_lock=args.all)
+        return
+
+    if args.command == "init":
+        created = init_project(
+            target_dir=args.path,
+            project_type=args.project_type,
+            entry_file=args.entry,
+            force=args.force,
+        )
+        for item in created:
+            print(item)
         return
 
 

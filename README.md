@@ -24,7 +24,8 @@ Most Python failures in real teams are not business logic bugs. They are runtime
 - Auto-heals common startup import failures with retries
 - Supports reproducible installs via `initiate.lock`
 - Enforces trust/block security policies
-- Provides CLI tooling for `run`, `lock`, `doctor`, `clean`
+- Translates common runtime failures into plain-English help
+- Provides CLI tooling for `init`, `run`, `lock`, `doctor`, `clean`
 
 ## Install
 
@@ -51,6 +52,14 @@ python app.py
 No manual virtualenv activation is needed.
 
 ## CLI
+
+### Initialize a Starter Project
+
+```bash
+initiate init my_first_app --type script
+```
+
+Templates: `script`, `fastapi`, `flask`, `streamlit`.
 
 ### Run
 
@@ -83,7 +92,10 @@ Strict mode installs only from `initiate.lock`.
 ```bash
 initiate doctor app.py
 initiate doctor app.py --json
+initiate doctor app.py --fix
 ```
+
+`--fix` attempts safe auto-repair for common setup issues (cache directory and pip tooling).
 
 ### Clean Cache
 
@@ -124,6 +136,7 @@ python -m initiate run demo_app.py --strict-lock
 6. Run diagnostics:
 ```bash
 python -m initiate doctor demo_app.py --json
+python -m initiate doctor demo_app.py --fix
 ```
 
 If all steps pass, your laptop setup is healthy.

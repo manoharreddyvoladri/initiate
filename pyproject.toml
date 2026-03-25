@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "initiate"
-version = "0.3.0"
-description = "Universal Python runtime bootstrapper with automatic dependency provisioning"
+version = "0.4.0"
+description = "Zero-config Python runtime bootstrapper with lockfiles, diagnostics, and beginner-friendly tooling"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }

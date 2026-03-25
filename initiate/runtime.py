@@ -185,32 +185,19 @@ def create_lock(
     )
 
 
-def doctor(script: str | Path | None = None) -> dict[str, object]:
+def doctor(script: str | Path | None = None, fix: bool = False) -> dict[str, object]:
     script_path = _resolve_script_path(script) if script else None
     project_root = _discover_project_root(script_path) if script_path else Path.cwd()
     config = load_runtime_config(project_root)
     lock_data = load_lockfile(project_root)
 
-    pip_ok = False
-    pip_message = ""
-    try:
-        completed = subprocess.run(
-            [sys.executable, "-m", "pip", "--version"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        pip_ok = completed.returncode == 0
-        pip_message = (completed.stdout or completed.stderr).strip()
-    except Exception as exc:
-        pip_message = str(exc)
-
-    cache_root = project_root / ".initiate"
-    cache_writable = True
-    try:
-        cache_root.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        cache_writable = False
+    pip_ok, pip_message = _check_pip()
+    cache_writable = _check_cache_writable(project_root)
+    fix_actions: list[str] = []
+    if fix:
+        fix_actions = _doctor_fix(project_root, pip_ok=pip_ok, cache_writable=cache_writable)
+        pip_ok, pip_message = _check_pip()
+        cache_writable = _check_cache_writable(project_root)
 
     detected_dependencies: list[str] = []
     if script_path:
@@ -230,6 +217,8 @@ def doctor(script: str | Path | None = None) -> dict[str, object]:
         "lockfile_python_version": lock_data.python_version if lock_data else None,
         "detected_dependencies": detected_dependencies,
         "runtime_config": asdict(config),
+        "fix_applied": fix,
+        "fix_actions": fix_actions,
     }
 
 
@@ -458,9 +447,11 @@ def _relaunch_in_managed_runtime(
 
         recovery = _infer_runtime_recovery(result.stderr or "")
         if not recovery:
+            _print_friendly_runtime_help(result.stderr or "", result.returncode)
             raise SystemExit(result.returncode)
         if attempt >= retries:
             _info("Retry limit reached while trying to auto-heal dependency issues.")
+            _print_friendly_runtime_help(result.stderr or "", result.returncode)
             raise SystemExit(result.returncode)
 
         packages = sorted({normalize_import_to_package(pkg) for pkg in recovery.packages if pkg})
@@ -468,6 +459,14 @@ def _relaunch_in_managed_runtime(
             raise SystemExit(result.returncode)
         if strict_lock:
             _info("strict-lock is enabled; auto-heal installation is blocked.")
+            _print_friendly_runtime_help(
+                result.stderr or "",
+                result.returncode,
+                extra=(
+                    "Strict lock is enabled, so new packages cannot be installed automatically. "
+                    "Update initiate.lock using `initiate lock <script>`."
+                ),
+            )
             raise SystemExit(result.returncode)
 
         _enforce_security_policy(packages, security)
@@ -502,6 +501,41 @@ def _infer_runtime_recovery(stderr: str) -> RuntimeRecovery | None:
         return RuntimeRecovery(reason="distribution_not_found", packages=missing_dists)
 
     return None
+
+
+def _print_friendly_runtime_help(stderr: str, return_code: int, extra: str | None = None) -> None:
+    message = _friendly_runtime_help(stderr, return_code, extra=extra)
+    if message:
+        print(f"[initiate] Help: {message}", file=sys.stderr)
+
+
+def _friendly_runtime_help(stderr: str, return_code: int, extra: str | None = None) -> str:
+    stripped = (stderr or "").strip()
+    if MODULE_NOT_FOUND_RE.search(stripped):
+        module_name = MODULE_NOT_FOUND_RE.search(stripped).group(1)  # type: ignore[union-attr]
+        message = (
+            f"The module '{module_name}' is still missing. "
+            "Check your internet/index settings or add the package to requirements and retry."
+        )
+        return f"{message} {extra}".strip() if extra else message
+    if "SyntaxError" in stripped:
+        message = "Python syntax error detected. Open the line mentioned in the traceback and fix code formatting."
+        return f"{message} {extra}".strip() if extra else message
+    if "IndentationError" in stripped:
+        message = "Indentation issue detected. Ensure consistent spaces and block indentation."
+        return f"{message} {extra}".strip() if extra else message
+    if "NameError" in stripped:
+        message = "A variable or function name is undefined. Check for typos and declaration order."
+        return f"{message} {extra}".strip() if extra else message
+    if "PermissionError" in stripped:
+        message = "Permission denied. Try running in a writable directory or with proper file permissions."
+        return f"{message} {extra}".strip() if extra else message
+    if stripped:
+        last_line = stripped.splitlines()[-1]
+        message = f"Application exited with code {return_code}. Last error: {last_line}"
+        return f"{message} {extra}".strip() if extra else message
+    message = f"Application exited with code {return_code}."
+    return f"{message} {extra}".strip() if extra else message
 
 
 def _detect_framework(script_path: Path, project_root: Path) -> FrameworkSpec | None:
@@ -684,6 +718,61 @@ def _run_command(
         error_text = stderr or stdout
         raise RuntimeError(f"Command failed ({completed.returncode}): {' '.join(command)}\n{error_text}")
     return completed
+
+
+def _check_pip() -> tuple[bool, str]:
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-m", "pip", "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        pip_ok = completed.returncode == 0
+        message = (completed.stdout or completed.stderr).strip()
+        return pip_ok, message
+    except Exception as exc:
+        return False, str(exc)
+
+
+def _check_cache_writable(project_root: Path) -> bool:
+    try:
+        (project_root / ".initiate").mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return False
+    return True
+
+
+def _doctor_fix(project_root: Path, pip_ok: bool, cache_writable: bool) -> list[str]:
+    actions: list[str] = []
+    if not cache_writable:
+        try:
+            (project_root / ".initiate" / "envs").mkdir(parents=True, exist_ok=True)
+            actions.append("Created .initiate cache directories.")
+        except OSError as exc:
+            actions.append(f"Failed to create cache directory: {exc}")
+    else:
+        (project_root / ".initiate" / "envs").mkdir(parents=True, exist_ok=True)
+        actions.append("Verified .initiate cache directories.")
+
+    if not pip_ok:
+        try:
+            _run_command([sys.executable, "-m", "ensurepip", "--upgrade"], cwd=project_root)
+            actions.append("Ran ensurepip --upgrade.")
+        except Exception as exc:
+            actions.append(f"ensurepip failed: {exc}")
+
+    pip_after, _ = _check_pip()
+    if not pip_after:
+        try:
+            _run_command([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], cwd=project_root)
+            actions.append("Upgraded pip.")
+        except Exception as exc:
+            actions.append(f"pip upgrade failed: {exc}")
+
+    if not actions:
+        actions.append("No changes were needed.")
+    return actions
 
 
 def _info(message: str) -> None:

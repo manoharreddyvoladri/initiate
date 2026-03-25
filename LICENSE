@@ -1,6 +1,10 @@
 MIT License
 
+<<<<<<< HEAD
+Copyright (c) 2026 Manohar Reddy Voladri
+=======
 Copyright (c) 2026 Initiate
+>>>>>>> 6a4781d (feat: initial production-ready initiate release)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

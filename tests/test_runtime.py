@@ -10,6 +10,7 @@ from initiate.runtime import (
     ManagedEnvironment,
     RuntimeRecovery,
     _enforce_security_policy,
+    _friendly_runtime_help,
     _infer_runtime_recovery,
     _relaunch_in_managed_runtime,
     _resolve_install_targets,
@@ -139,3 +140,8 @@ def test_resolve_install_targets_strict_lock_allows_empty_lock() -> None:
         use_lock=True,
     )
     assert targets == []
+
+
+def test_friendly_runtime_help_for_syntax_error() -> None:
+    message = _friendly_runtime_help("SyntaxError: invalid syntax", return_code=1)
+    assert "syntax error" in message.lower()
