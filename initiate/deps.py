@@ -8,7 +8,10 @@ from pathlib import Path
 try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover
-    tomllib = None
+    try:
+        import tomli as tomllib  # type: ignore[no-redef]
+    except ModuleNotFoundError:
+        tomllib = None
 
 STD_LIBS = set(getattr(sys, "stdlib_module_names", ())) | set(sys.builtin_module_names)
 SKIP_DIRS = {".git", ".hg", ".svn", ".idea", ".vscode", "__pycache__", ".venv", "venv", ".initiate"}
